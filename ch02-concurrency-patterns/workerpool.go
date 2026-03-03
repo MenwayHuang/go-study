@@ -39,6 +39,13 @@ func basicWorkerPool() {
 
 	jobs := make(chan int, numJobs)       // 任务队列（有缓冲，生产者不阻塞）
 	results := make(chan string, numJobs) // 结果队列
+	// 注意: 这里的 numJobs 只是 demo 为了方便设置的缓冲大小，并不代表 Worker Pool 必须“提前知道任务数量”。
+	// 实际项目里常见两类任务源:
+	//   1) 批处理/有限任务: producer 发完一批任务后 close(jobs)，worker 用 range jobs 自然退出。
+	//   2) 长期运行/流式任务: 往往用 context/done 信号让 producer 停止产出；当确认不会再发送任务时再 close(jobs)。
+	// 关键规则:
+	//   - 只有发送方/生产者才能 close(channel)，接收方不要 close。
+	//   - results 通常由“协调者”在 wg.Wait() 之后统一 close，避免 worker 误关导致 send on closed channel。
 
 	// 启动固定数量的 Worker
 	var wg sync.WaitGroup
@@ -113,6 +120,11 @@ func workerPoolWithResults() {
 
 	tasks := make(chan Task, numTasks)
 	results := make(chan Result, numTasks)
+	// 注意: 这里用 numTasks 作为缓冲仅是为了 demo 输出更直观。
+	// 如果任务数量未知/任务持续产生:
+	//   - tasks 由 producer 在“不会再发送任务”时关闭（不要求预先知道总数）。
+	//   - 多 producer 时，常见做法是先等所有 producer 退出，再由统一的协调者 close(tasks)。
+	//   - results 的关闭不要放在 worker 里做，而是由协调者 wg.Wait() 后统一 close(results)。
 
 	// 启动 Worker
 	var wg sync.WaitGroup

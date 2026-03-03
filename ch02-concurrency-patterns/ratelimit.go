@@ -26,13 +26,16 @@ func RunRateLimitDemo() {
 //   - 每个请求消耗一个令牌
 //   - 桶满了新令牌丢弃，桶空了请求被拒绝/等待
 // 优点: 允许一定程度的突发流量 (桶里攒了令牌就可以突发消费)
+// 实际项目理解:
+//   - rate 决定“稳态吞吐”（例如每 100ms 放 1 个令牌 ≈ 10 QPS）
+//   - capacity 决定“突发能力”（桶里攒满令牌时可以瞬间放行一波）
 
 type TokenBucket struct {
-	capacity   int           // 桶容量
-	tokens     int           // 当前令牌数
-	rate       time.Duration // 放令牌的间隔
-	mu         sync.Mutex
-	stopCh     chan struct{}
+	capacity int           // 桶容量
+	tokens   int           // 当前令牌数
+	rate     time.Duration // 放令牌的间隔
+	mu       sync.Mutex
+	stopCh   chan struct{}
 }
 
 func NewTokenBucket(capacity int, rate time.Duration) *TokenBucket {
@@ -62,6 +65,7 @@ func (tb *TokenBucket) refill() {
 			return
 		}
 	}
+
 }
 
 // Allow 尝试获取一个令牌，返回是否允许
@@ -76,6 +80,8 @@ func (tb *TokenBucket) Allow() bool {
 }
 
 func (tb *TokenBucket) Stop() {
+	// 注意: Stop() 代表不再使用该 limiter。
+	// 实际项目里应确保 Stop() 只调用一次（重复 close 会 panic），或用 sync.Once 保护。
 	close(tb.stopCh)
 }
 
@@ -108,6 +114,9 @@ func tokenBucketDemo() {
 //   - 记录每个请求的时间戳
 //   - 统计窗口时间内的请求数
 //   - 超过阈值则拒绝
+// 取舍:
+//   - 简易实现通常需要每次清理窗口外时间戳，QPS 很高时可能变慢
+//   - 生产级更常用“分桶计数/环形数组”把开销压到近似 O(1)
 
 type SlidingWindow struct {
 	windowSize time.Duration
@@ -171,6 +180,9 @@ func slidingWindowDemo() {
 // ============================================================
 // 关键点: 用 time.Ticker 控制请求速率，适合简单场景
 // 实际项目推荐使用 golang.org/x/time/rate 包
+// 注意:
+//   - 一定要 Stop() ticker，避免资源泄漏
+//   - ticker 适合“匀速执行”；如果需要“允许突发”，更适合令牌桶
 
 func tickerRateLimitDemo() {
 	// 每100ms允许一个请求 → QPS=10

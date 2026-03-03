@@ -52,7 +52,9 @@ go tool pprof http://localhost:6060/debug/pprof/heap                 # 内存
 go tool pprof -http=:8081 http://localhost:6060/debug/pprof/profile?seconds=10
 ```
 
-## 8.2 sync.Pool 原理
+## 8.2 sync.Pool 原理详解
+
+### 基本原理
 
 ```
   正常流程 (无Pool):
@@ -64,6 +66,61 @@ go tool pprof -http=:8081 http://localhost:6060/debug/pprof/profile?seconds=10
   请求1: Pool.Get() → 使用 → Pool.Put() → 放回池子
   请求2: Pool.Get() → 复用! → Pool.Put() → 放回池子  ← 零分配
   请求3: Pool.Get() → 复用! → Pool.Put() → 放回池子
+```
+
+### sync.Pool 内部结构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      sync.Pool                              │
+│                                                             │
+│   每个P (处理器) 有自己的本地池:                              │
+│   ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐       │
+│   │   P0    │  │   P1    │  │   P2    │  │   P3    │       │
+│   │ private │  │ private │  │ private │  │ private │       │
+│   │ shared  │  │ shared  │  │ shared  │  │ shared  │       │
+│   └─────────┘  └─────────┘  └─────────┘  └─────────┘       │
+│                                                             │
+│   Get() 顺序:                                               │
+│   1. 先从当前P的private取 (无锁，最快)                        │
+│   2. 再从当前P的shared取                                     │
+│   3. 从其他P的shared偷取                                     │
+│   4. 都没有则调用 New() 创建                                 │
+│                                                             │
+│   Put() 顺序:                                               │
+│   1. 放入当前P的private (如果空)                             │
+│   2. 放入当前P的shared                                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 重要注意事项
+
+| 要点 | 说明 |
+|------|------|
+| **Pool不是缓存** | GC时Pool中的对象可能被清空，不能依赖Pool保存数据 |
+| **对象要重置** | Put回池子前要清空对象状态，避免脏数据 |
+| **适用场景** | 频繁创建销毁的临时对象（如buffer、临时结构体） |
+| **不适用场景** | 需要持久保存的对象、连接池（用专门的连接池） |
+
+### 典型使用示例
+
+```go
+var bufferPool = sync.Pool{
+    New: func() interface{} {
+        return new(bytes.Buffer)
+    },
+}
+
+func process() {
+    buf := bufferPool.Get().(*bytes.Buffer)
+    defer func() {
+        buf.Reset()           // 重要：清空状态
+        bufferPool.Put(buf)
+    }()
+    
+    buf.WriteString("hello")
+    // 使用 buf...
+}
 ```
 
 ## 8.3 内存优化关键点

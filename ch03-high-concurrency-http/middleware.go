@@ -129,6 +129,10 @@ func (rl *rateLimiter) allow() bool {
 // rate: 每秒允许的请求数, capacity: 令牌桶容量(允许的突发量)
 func RateLimitMiddleware(rate float64, capacity float64) Middleware {
 	limiter := newRateLimiter(rate, capacity)
+	// 注意:
+	//   - limiter 实例会被该中间件包裹的所有请求共享（进程内共享限流器）。
+	//   - 这种限流适合单实例或“每实例独立限流”的场景；多实例全局限流通常要上 Redis/网关。
+	//   - limiter 内部用 mutex 保证并发安全。
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

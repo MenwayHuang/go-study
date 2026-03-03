@@ -48,6 +48,87 @@
 
 ---
 
+## 5.1 LRU 缓存原理详解
+
+### 什么是 LRU？
+
+**LRU (Least Recently Used)**：最近最少使用。当缓存容量满时，淘汰最久没被访问的数据。
+
+### 为什么需要淘汰策略？
+
+```
+缓存容量有限（如只能存1000条）
+  ↓
+不断有新数据要缓存
+  ↓
+必须淘汰一些旧数据腾出空间
+  ↓
+淘汰哪些？→ LRU: 淘汰最久没被访问的
+```
+
+### LRU 的数据结构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        LRU Cache                            │
+│                                                             │
+│   HashMap: key → 链表节点指针 (O(1) 查找)                    │
+│   ┌─────┬─────┬─────┬─────┐                                │
+│   │ k1  │ k2  │ k3  │ k4  │                                │
+│   │  ↓  │  ↓  │  ↓  │  ↓  │                                │
+│   └─────┴─────┴─────┴─────┘                                │
+│        ↓     ↓     ↓     ↓                                  │
+│   双向链表: 最近使用 ←→ ... ←→ 最久未用                      │
+│   ┌─────┐   ┌─────┐   ┌─────┐   ┌─────┐                    │
+│   │ k1  │←→│ k2  │←→│ k3  │←→│ k4  │                    │
+│   │(新) │   │     │   │     │   │(旧) │                    │
+│   └─────┘   └─────┘   └─────┘   └─────┘                    │
+│    HEAD                           TAIL                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 核心操作
+
+| 操作 | 步骤 | 时间复杂度 |
+|------|------|------------|
+| **Get(key)** | 1. HashMap找到节点 2. 移到链表头部 | O(1) |
+| **Put(key, val)** | 1. 已存在→更新+移到头部 2. 不存在→新建+插入头部 3. 超容量→删除尾部 | O(1) |
+
+### 为什么用双向链表？
+
+- **单向链表**：删除节点需要找前驱，O(n)
+- **双向链表**：直接通过 prev 指针删除，O(1)
+
+### 代码实现要点
+
+```go
+type LRUCache struct {
+    capacity int
+    cache    map[string]*list.Element  // HashMap: key → 链表节点
+    list     *list.List                // 双向链表
+}
+
+// Get: 命中后移到头部
+func (c *LRUCache) Get(key string) {
+    if elem, ok := c.cache[key]; ok {
+        c.list.MoveToFront(elem)  // 关键：移到头部
+        return elem.Value
+    }
+}
+
+// Put: 超容量时删除尾部
+func (c *LRUCache) Put(key string, value interface{}) {
+    if c.list.Len() >= c.capacity {
+        oldest := c.list.Back()   // 尾部是最久未用的
+        c.list.Remove(oldest)
+        delete(c.cache, oldest.key)
+    }
+    // 插入新节点到头部...
+}
+```
+
+---
+
 ## 5.2 缓存三大问题详解
 
 ### 缓存穿透
@@ -91,6 +172,106 @@
   2. 互斥锁: 只有拿到锁的请求去查，其余等待
   3. 热点key永不过期 + 异步刷新
 ```
+
+---
+
+## 5.3 SingleFlight 原理详解
+
+### 什么是 SingleFlight？
+
+**SingleFlight**：对于相同的 key，多个并发请求只会执行一次函数调用，其他请求等待并共享同一个结果。
+
+### 为什么需要 SingleFlight？
+
+```
+热点key过期的瞬间：
+
+无防护：
+  请求1 ──→ 缓存Miss ──→ 查数据库
+  请求2 ──→ 缓存Miss ──→ 查数据库  ← 100个请求同时打到数据库！
+  请求3 ──→ 缓存Miss ──→ 查数据库
+  ...
+  请求100 ──→ 缓存Miss ──→ 查数据库
+
+SingleFlight：
+  请求1 ──→ 缓存Miss ──→ 查数据库 ──→ 返回结果
+  请求2 ──→ 缓存Miss ──→ 等待请求1 ──→ 共享结果  ← 只查1次数据库！
+  请求3 ──→ 缓存Miss ──→ 等待请求1 ──→ 共享结果
+  ...
+  请求100 ──→ 缓存Miss ──→ 等待请求1 ──→ 共享结果
+```
+
+### 核心原理
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     SingleFlight                            │
+│                                                             │
+│   calls map[string]*call  // 正在执行的请求                  │
+│                                                             │
+│   Do(key, fn):                                              │
+│   ┌─────────────────────────────────────────────────────┐   │
+│   │ 1. 检查 calls[key] 是否存在                          │   │
+│   │    ├─ 存在: 等待 wg.Wait()，返回共享结果             │   │
+│   │    └─ 不存在: 创建 call，执行 fn()                   │   │
+│   │ 2. 执行完成: wg.Done()，删除 calls[key]              │   │
+│   └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 代码实现要点
+
+```go
+type SingleFlight struct {
+    mu    sync.Mutex
+    calls map[string]*call  // key → 正在执行的调用
+}
+
+type call struct {
+    wg  sync.WaitGroup  // 用于等待
+    val interface{}     // 结果
+    err error
+}
+
+func (sf *SingleFlight) Do(key string, fn func() (interface{}, error)) (interface{}, error) {
+    sf.mu.Lock()
+    
+    // 已有相同key在执行，等待结果
+    if c, ok := sf.calls[key]; ok {
+        sf.mu.Unlock()
+        c.wg.Wait()           // 等待第一个请求完成
+        return c.val, c.err   // 共享结果
+    }
+    
+    // 第一个请求，创建call
+    c := &call{}
+    c.wg.Add(1)
+    sf.calls[key] = c
+    sf.mu.Unlock()
+    
+    c.val, c.err = fn()  // 执行实际函数
+    c.wg.Done()          // 通知所有等待者
+    
+    sf.mu.Lock()
+    delete(sf.calls, key)  // 清理
+    sf.mu.Unlock()
+    
+    return c.val, c.err
+}
+```
+
+### SingleFlight vs 互斥锁
+
+| 方案 | 优点 | 缺点 |
+|------|------|------|
+| **互斥锁** | 实现简单 | 需要双重检查，锁粒度大 |
+| **SingleFlight** | 更优雅，自动共享结果 | 需要引入额外组件 |
+
+### 使用场景
+
+- **缓存击穿防护**：热点key过期时
+- **防止重复计算**：相同参数的并发请求
+- **API聚合**：相同请求只调用一次下游服务
 
 ---
 

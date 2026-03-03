@@ -18,7 +18,7 @@ func main() {
 	// 注册业务Handler
 	mux.HandleFunc("/api/hello", helloHandler)
 	mux.HandleFunc("/api/slow", slowHandler)   // 模拟慢请求
-	mux.HandleFunc("/api/panic", panicHandler)  // 模拟panic
+	mux.HandleFunc("/api/panic", panicHandler) // 模拟panic
 
 	// 关键点: 中间件链 — 从外到内包裹Handler
 	// 执行顺序: Logger → Recovery → RateLimit → Handler
@@ -68,6 +68,8 @@ func gracefulShutdown(server *http.Server) {
 	fmt.Printf("\n📛 收到信号: %v, 开始优雅关闭...\n", sig)
 
 	// 关键点: 给已有请求最多30秒的时间完成
+	// 注意: server.Shutdown 会让正在处理的请求的 r.Context() 进入 Done 状态，
+	// 所以 handler 内部应尽量把 r.Context() 传递给下游调用/等待逻辑，才能做到“可取消”。
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -94,6 +96,7 @@ func helloHandler(w http.ResponseWriter, r *http.Request) {
 func slowHandler(w http.ResponseWriter, r *http.Request) {
 	// 模拟慢请求 — 用来测试优雅关闭
 	// 关键点: 使用 request context 检测客户端是否断开
+	// 实际项目里同样建议把 r.Context() 传给数据库/HTTP/RPC 调用，让下游也能及时取消。
 	select {
 	case <-time.After(3 * time.Second):
 		fmt.Fprintf(w, `{"message": "slow response done"}`)

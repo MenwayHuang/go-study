@@ -8,7 +8,7 @@ import (
 func main() {
 	demo := flag.String("demo", "all", "选择: workerpool, fanout, pipeline, ratelimit, errgroup, all")
 	flag.Parse()
-	basicWorkerPool()
+	RunFanOutFanInDemo()
 	*demo = ""
 	switch *demo {
 	case "workerpool":

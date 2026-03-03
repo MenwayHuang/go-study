@@ -21,6 +21,11 @@ func RunErrGroupDemo() {
 //   - 并发执行多个任务
 //   - 收集第一个错误
 //   - 等待所有任务完成
+//
+// 
+// 注意:
+//   - “收集第一个错误”并不等于“快速失败”。这里的实现不会主动取消其他任务。
+//   - 如果你希望任一失败立刻停止其他任务，需要配合 context 取消（见 CancelErrGroup）。
 type SimpleErrGroup struct {
 	wg      sync.WaitGroup
 	errOnce sync.Once
@@ -81,6 +86,9 @@ func simpleErrGroupDemo() {
 
 // CancelErrGroup 带取消功能: 一个任务失败，取消其他所有任务
 // 关键点: 这是 golang.org/x/sync/errgroup.WithContext 的核心行为
+// 注意:
+//   - 取消只是“发出信号”，其他任务必须在逻辑里监听 ctx.Done() 才能尽快退出。
+//   - 被取消的任务通常会返回 ctx.Err()；但我们只记录第一个触发 cancel 的错误，避免 ctx.Err 覆盖真实根因。
 type CancelErrGroup struct {
 	wg      sync.WaitGroup
 	errOnce sync.Once
@@ -106,6 +114,14 @@ func (g *CancelErrGroup) Go(f func(ctx context.Context) error) {
 		}
 	}()
 }
+
+// 扩展思路: 并发上限（常见需求）
+// 真实项目经常需要“并发做 N 件事，但最多同时跑 K 个”。
+// 常见做法是在 Go(f) 前后加一个 semaphore：
+//   sem := make(chan struct{}, K)
+//   sem <- struct{}{}  // acquire
+//   g.Go(func(...) error { defer func(){<-sem}(); ... })
+// 这样可以避免同时起太多 goroutine 或下游请求。
 
 func (g *CancelErrGroup) Wait() error {
 	g.wg.Wait()
