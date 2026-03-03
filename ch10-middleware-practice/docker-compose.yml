@@ -1,0 +1,45 @@
+# Docker Compose — 一键启动 Redis + NATS
+# 使用: docker-compose up -d
+# 停止: docker-compose down
+
+version: '3.8'
+
+services:
+  # ============================================================
+  # Redis — 高性能KV存储
+  # ============================================================
+  # 用途: 缓存、分布式锁、计数器、库存预减、排行榜
+  # 端口: 6379
+  # 连接: redis-cli -h localhost -p 6379
+  redis:
+    image: redis:7-alpine
+    container_name: go-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # --appendonly yes       : 开启AOF持久化(生产必备)
+    # --maxmemory 256mb      : 限制最大内存(学习环境够用)
+    # --maxmemory-policy     : 内存满时用LRU淘汰(和第5章LRU对应)
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  # ============================================================
+  # NATS — 云原生消息系统
+  # ============================================================
+  # 用途: 发布订阅、队列组负载均衡、微服务通信
+  # 客户端端口: 4222
+  # 监控面板:   http://localhost:8222
+  nats:
+    image: nats:latest
+    container_name: go-nats
+    ports:
+      - "4222:4222"   # 客户端连接
+      - "8222:8222"   # HTTP 监控面板
+    command: "--http_port 8222 -js"
+    # --http_port 8222 : 开启监控HTTP接口
+    # -js              : 开启JetStream(持久化消息，类似Kafka)
+    restart: unless-stopped
+
+volumes:
+  redis-data:
