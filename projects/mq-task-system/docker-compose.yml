@@ -1,0 +1,35 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: mq_rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: mq_redis
+    ports:
+      - "6379:6379"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: mq_prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: mq_grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus

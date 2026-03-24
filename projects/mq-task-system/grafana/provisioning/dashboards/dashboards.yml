@@ -1,0 +1,11 @@
+apiVersion: 1
+
+dashboards:
+  - name: "mq-task"
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards

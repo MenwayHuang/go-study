@@ -1,0 +1,49 @@
+{
+  "annotations": {"list": []},
+  "editable": true,
+  "graphTooltip": 0,
+  "id": null,
+  "panels": [
+    {
+      "datasource": {"type": "prometheus", "uid": "-100"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "id": 1,
+      "targets": [
+        {"expr": "sum(rate(task_consumed_total{result=\"ok\"}[1m]))", "legendFormat": "consume_ok_qps", "refId": "A"},
+        {"expr": "sum(rate(task_consumed_total{result=\"error\"}[1m]))", "legendFormat": "consume_err_qps", "refId": "B"}
+      ],
+      "title": "Consume QPS",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "-100"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 2,
+      "targets": [
+        {"expr": "rate(task_retry_total[5m])", "legendFormat": "retry_per_sec", "refId": "A"}
+      ],
+      "title": "Retries (DLQ)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "-100"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 3,
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum(rate(task_consume_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P95", "refId": "A"},
+        {"expr": "histogram_quantile(0.99, sum(rate(task_consume_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P99", "refId": "B"}
+      ],
+      "title": "Consume Latency (P95/P99)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["mq", "rabbitmq", "go"],
+  "templating": {"list": []},
+  "time": {"from": "now-15m", "to": "now"},
+  "timezone": "browser",
+  "title": "mq-task-system",
+  "uid": "mq-task",
+  "version": 1
+}
