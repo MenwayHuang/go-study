@@ -18,20 +18,41 @@ import (
 )
 
 type Config struct {
-	RabbitURL string
-	RedisAddr string
-	Exchange  string
-	Queue     string
-	DLQ       string
-	Workers   int
-	Prefetch  int
-	DedupTTL  time.Duration
+	RabbitURL         string
+	RabbitMgmtURL     string
+	RabbitMgmtUser    string
+	RabbitMgmtPass    string
+	RabbitVHost       string
+	RedisAddr         string
+	Exchange          string
+	Queue             string
+	DLQ               string
+	Workers           int
+	Prefetch          int
+	DedupTTL          time.Duration
+	QueuePollInterval time.Duration
 }
 
 func ConfigFromEnv() Config {
 	url := os.Getenv("RABBITMQ_URL")
 	if url == "" {
 		url = "amqp://guest:guest@localhost:5672/"
+	}
+	mgmtURL := os.Getenv("RABBITMQ_MGMT_URL")
+	if mgmtURL == "" {
+		mgmtURL = "http://localhost:15672"
+	}
+	mgmtUser := os.Getenv("RABBITMQ_MGMT_USER")
+	if mgmtUser == "" {
+		mgmtUser = "guest"
+	}
+	mgmtPass := os.Getenv("RABBITMQ_MGMT_PASS")
+	if mgmtPass == "" {
+		mgmtPass = "guest"
+	}
+	vhost := os.Getenv("RABBITMQ_VHOST")
+	if vhost == "" {
+		vhost = "/"
 	}
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
@@ -46,19 +67,25 @@ func ConfigFromEnv() Config {
 		prefetch = workers
 	}
 	return Config{
-		RabbitURL: url,
-		RedisAddr: redisAddr,
-		Exchange:  "tasks.ex",
-		Queue:     "tasks.q",
-		DLQ:       "tasks.dlq",
-		Workers:   workers,
-		Prefetch:  prefetch,
-		DedupTTL:  10 * time.Minute,
+		RabbitURL:         url,
+		RabbitMgmtURL:     mgmtURL,
+		RabbitMgmtUser:    mgmtUser,
+		RabbitMgmtPass:    mgmtPass,
+		RabbitVHost:       vhost,
+		RedisAddr:         redisAddr,
+		Exchange:          "tasks.ex",
+		Queue:             "tasks.q",
+		DLQ:               "tasks.dlq",
+		Workers:           workers,
+		Prefetch:          prefetch,
+		DedupTTL:          10 * time.Minute,
+		QueuePollInterval: 2 * time.Second,
 	}
 }
 
 type Consumer struct {
 	r     *mq.Rabbit
+	mgmt  *mq.MgmtClient
 	dedup *dedup.RedisDedup
 	cfg   Config
 }
@@ -84,7 +111,8 @@ func New(cfg Config) (*Consumer, error) {
 	}
 
 	d := dedup.NewRedisDedup(cfg.RedisAddr, cfg.DedupTTL)
-	return &Consumer{r: r, dedup: d, cfg: cfg}, nil
+	mgmt := mq.NewMgmtClient(cfg.RabbitMgmtURL, cfg.RabbitMgmtUser, cfg.RabbitMgmtPass)
+	return &Consumer{r: r, mgmt: mgmt, dedup: d, cfg: cfg}, nil
 }
 
 func (c *Consumer) Close() {
@@ -97,6 +125,9 @@ func (c *Consumer) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+
+	// 采集队列深度/消费者数，用于“制造积压→恢复”的演练曲线。
+	go c.pollQueueStats(ctx)
 
 	jobs := make(chan amqp.Delivery)
 	g, ctx := errgroup.WithContext(ctx)
@@ -139,6 +170,29 @@ func (c *Consumer) Run(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (c *Consumer) pollQueueStats(ctx context.Context) {
+	ticker := time.NewTicker(c.cfg.QueuePollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			qi, err := c.mgmt.GetQueueInfo(ctx, c.cfg.RabbitVHost, c.cfg.Queue)
+			if err == nil {
+				metrics.QueueMessages.WithLabelValues(c.cfg.Queue).Set(float64(qi.Messages))
+				metrics.QueueConsumers.WithLabelValues(c.cfg.Queue).Set(float64(qi.Consumers))
+			}
+			dlq, err := c.mgmt.GetQueueInfo(ctx, c.cfg.RabbitVHost, c.cfg.DLQ)
+			if err == nil {
+				metrics.QueueMessages.WithLabelValues(c.cfg.DLQ).Set(float64(dlq.Messages))
+				metrics.QueueConsumers.WithLabelValues(c.cfg.DLQ).Set(float64(dlq.Consumers))
+			}
+		}
+	}
 }
 
 func (c *Consumer) handle(ctx context.Context, d amqp.Delivery) {

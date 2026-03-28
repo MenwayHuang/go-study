@@ -18,6 +18,17 @@
     {
       "datasource": {"type": "prometheus", "uid": "-100"},
       "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "id": 4,
+      "targets": [
+        {"expr": "rabbitmq_queue_messages{queue=\"tasks.q\"}", "legendFormat": "tasks.q", "refId": "A"},
+        {"expr": "rabbitmq_queue_messages{queue=\"tasks.dlq\"}", "legendFormat": "tasks.dlq", "refId": "B"}
+      ],
+      "title": "Backlog (Queue Depth)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "-100"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
       "id": 2,
       "targets": [
         {"expr": "rate(task_retry_total[5m])", "legendFormat": "retry_per_sec", "refId": "A"}
@@ -34,6 +45,16 @@
         {"expr": "histogram_quantile(0.99, sum(rate(task_consume_duration_seconds_bucket[5m])) by (le))", "legendFormat": "P99", "refId": "B"}
       ],
       "title": "Consume Latency (P95/P99)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "-100"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "id": 5,
+      "targets": [
+        {"expr": "rabbitmq_queue_consumers{queue=\"tasks.q\"}", "legendFormat": "tasks.q", "refId": "A"}
+      ],
+      "title": "Consumers (from Mgmt API)",
       "type": "timeseries"
     }
   ],
