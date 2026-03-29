@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"path"
+	"strings"
 	"time"
 )
 
@@ -38,17 +38,12 @@ func NewMgmtClient(baseURL, username, password string) *MgmtClient {
 // API: GET /api/queues/{vhost}/{name}
 // vhost 默认是 "/"，需要 url-encode。
 func (c *MgmtClient) GetQueueInfo(ctx context.Context, vhost, queue string) (QueueInfo, error) {
-	base, err := url.Parse(c.BaseURL)
-	if err != nil {
-		return QueueInfo{}, err
-	}
-
 	// vhost="/" 在 URL path 里要变成 %2F
 	vhostEsc := url.PathEscape(vhost)
 	queueEsc := url.PathEscape(queue)
-	base.Path = path.Join(base.Path, "/api/queues/", vhostEsc, queueEsc)
+	requestURL := fmt.Sprintf("%s/api/queues/%s/%s", strings.TrimRight(c.BaseURL, "/"), vhostEsc, queueEsc)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base.String(), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return QueueInfo{}, err
 	}
@@ -61,7 +56,7 @@ func (c *MgmtClient) GetQueueInfo(ctx context.Context, vhost, queue string) (Que
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return QueueInfo{}, fmt.Errorf("mgmt api status=%d", resp.StatusCode)
+		return QueueInfo{}, fmt.Errorf("mgmt api status=%d url=%s", resp.StatusCode, requestURL)
 	}
 
 	var qi QueueInfo

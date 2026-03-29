@@ -40,7 +40,7 @@ go run ./cmd/producer -n 5000 -concurrency 20
 
 - 打开 RabbitMQ 管理台： http://localhost:15672
 - 查看 `tasks.q` 的 `Messages` 是否持续上升
-- 打开 Grafana： http://localhost:3001
+- 打开 Grafana： http://localhost:3000
   - Dashboard: `mq-task-system`
   - 看 `Backlog (Queue Depth)` 面板，`tasks.q` 应该上升
 

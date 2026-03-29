@@ -176,6 +176,8 @@ func (c *Consumer) pollQueueStats(ctx context.Context) {
 	ticker := time.NewTicker(c.cfg.QueuePollInterval)
 	defer ticker.Stop()
 
+	log.Printf("queue stats polling started: mgmt_url=%s vhost=%s queue=%s dlq=%s interval=%s", c.cfg.RabbitMgmtURL, c.cfg.RabbitVHost, c.cfg.Queue, c.cfg.DLQ, c.cfg.QueuePollInterval)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -185,11 +187,17 @@ func (c *Consumer) pollQueueStats(ctx context.Context) {
 			if err == nil {
 				metrics.QueueMessages.WithLabelValues(c.cfg.Queue).Set(float64(qi.Messages))
 				metrics.QueueConsumers.WithLabelValues(c.cfg.Queue).Set(float64(qi.Consumers))
+				log.Printf("queue stats updated: queue=%s messages=%d consumers=%d", c.cfg.Queue, qi.Messages, qi.Consumers)
+			} else {
+				log.Printf("queue stats poll failed: queue=%s err=%v", c.cfg.Queue, err)
 			}
 			dlq, err := c.mgmt.GetQueueInfo(ctx, c.cfg.RabbitVHost, c.cfg.DLQ)
 			if err == nil {
 				metrics.QueueMessages.WithLabelValues(c.cfg.DLQ).Set(float64(dlq.Messages))
 				metrics.QueueConsumers.WithLabelValues(c.cfg.DLQ).Set(float64(dlq.Consumers))
+				log.Printf("queue stats updated: queue=%s messages=%d consumers=%d", c.cfg.DLQ, dlq.Messages, dlq.Consumers)
+			} else {
+				log.Printf("queue stats poll failed: queue=%s err=%v", c.cfg.DLQ, err)
 			}
 		}
 	}
