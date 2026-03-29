@@ -40,9 +40,14 @@
           "refId": "A"
         },
         {
+          "expr": "rabbitmq_queue_messages{queue=\"tasks.retry.q\"}",
+          "legendFormat": "tasks.retry.q",
+          "refId": "B"
+        },
+        {
           "expr": "rabbitmq_queue_messages{queue=\"tasks.dlq\"}",
           "legendFormat": "tasks.dlq",
-          "refId": "B"
+          "refId": "C"
         }
       ],
       "title": "Backlog (Queue Depth)",
@@ -77,9 +82,14 @@
       "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
       "targets": [
         {
-          "expr": "sum(rate(task_retry_total[1m]))",
-          "legendFormat": "retry_qps",
+          "expr": "sum(rate(task_retry_scheduled_total[1m]))",
+          "legendFormat": "retry_scheduled_qps",
           "refId": "A"
+        },
+        {
+          "expr": "sum(rate(task_retry_total[1m]))",
+          "legendFormat": "to_dlq_qps",
+          "refId": "B"
         }
       ],
       "title": "Retries / DLQ Rate",
@@ -98,12 +108,43 @@
           "refId": "A"
         },
         {
+          "expr": "rabbitmq_queue_consumers{queue=\"tasks.retry.q\"}",
+          "legendFormat": "tasks.retry.q",
+          "refId": "B"
+        },
+        {
           "expr": "rabbitmq_queue_consumers{queue=\"tasks.dlq\"}",
           "legendFormat": "tasks.dlq",
-          "refId": "B"
+          "refId": "C"
         }
       ],
       "title": "Consumers (from Mgmt API)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "id": 6,
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}},
+      "targets": [
+        {
+          "expr": "task_circuit_open",
+          "legendFormat": "circuit_open",
+          "refId": "A"
+        },
+        {
+          "expr": "increase(task_dlq_total[5m])",
+          "legendFormat": "dlq_total_5m",
+          "refId": "B"
+        },
+        {
+          "expr": "increase(task_rate_limit_wait_total[5m])",
+          "legendFormat": "rate_limit_wait_5m",
+          "refId": "C"
+        }
+      ],
+      "title": "Circuit / DLQ / Rate Limit",
       "type": "timeseries"
     }
   ],

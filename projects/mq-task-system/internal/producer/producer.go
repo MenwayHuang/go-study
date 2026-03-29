@@ -42,7 +42,7 @@ func New(cfg Config) (*Producer, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := r.Setup(cfg.Exchange, cfg.QueueKey, "tasks.dlq"); err != nil {
+	if err := r.Setup(cfg.Exchange, cfg.QueueKey, "tasks.retry.q", "tasks.dlq"); err != nil {
 		r.Close()
 		return nil, err
 	}
