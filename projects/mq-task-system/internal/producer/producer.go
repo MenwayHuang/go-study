@@ -17,6 +17,8 @@ type Config struct {
 	RabbitURL string
 	Exchange  string
 	QueueKey  string
+	RetryKey  string
+	DLQKey    string
 }
 
 func ConfigFromEnv() Config {
@@ -24,7 +26,7 @@ func ConfigFromEnv() Config {
 	if url == "" {
 		url = "amqp://guest:guest@localhost:5672/"
 	}
-	return Config{RabbitURL: url, Exchange: "tasks.ex", QueueKey: "tasks.q"}
+	return Config{RabbitURL: url, Exchange: "tasks.ex", QueueKey: "tasks.q", RetryKey: "tasks.retry", DLQKey: "tasks.dlq"}
 }
 
 type Producer struct {
@@ -42,7 +44,7 @@ func New(cfg Config) (*Producer, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := r.Setup(cfg.Exchange, cfg.QueueKey, "tasks.retry.q", "tasks.dlq"); err != nil {
+	if err := r.Setup(cfg.Exchange, cfg.QueueKey, cfg.RetryKey, cfg.DLQKey); err != nil {
 		r.Close()
 		return nil, err
 	}

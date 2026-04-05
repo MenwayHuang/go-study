@@ -5,7 +5,7 @@
 - 生产者 Producer：发布任务
 - 消费者 Consumer：worker pool 并发消费
 - 幂等：Redis `SETNX` + TTL
-- 重试：失败消息进入 DLQ（死信队列），并提供重放（requeue）脚本入口
+- 重试：失败消息进入 DLQ（死信队列），并提供重放（replay）命令
 - 可观测性：Prometheus 指标 + Grafana 看板（自动导入）
 
 > 目标：你可以用它来讲清楚“at-least-once + 幂等 + 重试 + 积压治理 + 指标体系”。
@@ -35,6 +35,22 @@ go run ./cmd/consumer
 ```bash
 go run ./cmd/producer -n 1000 -concurrency 10
 ```
+
+### 4) DLQ 重放（可选）
+
+将 `tasks.dlq` 中的消息重新投递回 `tasks.q`：
+
+```bash
+go run ./cmd/dlq-replay -n 200
+```
+
+### 5) 积压演练（建议必做）
+
+见 `DRILL.md`，会指导你：
+
+- 低并发启动 consumer 制造积压
+- 提升并发恢复
+- 产出 Grafana 曲线截图 + 演练报告
 
 ## 队列/交换机设计
 
